@@ -64,9 +64,7 @@ class DXCamera:
 
     def _grab(self, region: Tuple[int, int, int, int]):
     # Modified: Always capture if update_frame succeeds, even if no visual change
-    if self._duplicator.update_frame(force_update=True):  # ← Pass force_update
-        # Removed: if not self._duplicator.updated: return None
-        # Force capture of current frame state, even if identical to previous
+    if self._duplicator.update_frame(force_update=True):
         self._device.im_context.CopyResource(
             self._stagesurf.texture, self._duplicator.texture
         )
