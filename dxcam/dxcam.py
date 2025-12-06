@@ -15,7 +15,6 @@ from dxcam.util.timer import (
     WAIT_FAILED,
 )
 
-
 class DXCamera:
     def __init__(
         self,
@@ -34,32 +33,25 @@ class DXCamera:
             output=self._output, device=self._device
         )
         self._processor: Processor = Processor(output_color=output_color)
-
         self.width, self.height = self._output.resolution
         self.channel_size = len(output_color) if output_color != "GRAY" else 1
         self.rotation_angle: int = self._output.rotation_angle
-
         self._region_set_by_user = region is not None
         self.region: Tuple[int, int, int, int] = region
         if self.region is None:
             self.region = (0, 0, self.width, self.height)
         self._validate_region(self.region)
-
         self.max_buffer_len = max_buffer_len
         self.is_capturing = False
-
         self.__thread = None
         self.__lock = Lock()
         self.__stop_capture = Event()
-
         self.__frame_available = Event()
         self.__frame_buffer: np.ndarray = None
         self.__head = 0
         self.__tail = 0
         self.__full = False
-
         self.__timer_handle = None
-
         self.__frame_count = 0
         self.__capture_start_time = 0
 
@@ -71,9 +63,10 @@ class DXCamera:
         return frame
 
     def _grab(self, region: Tuple[int, int, int, int]):
+        # Modified: Always capture if update_frame() succeeds, even if no visual change (updated=False)
         if self._duplicator.update_frame():
-            if not self._duplicator.updated:
-                return None
+            # Removed the 'if not self._duplicator.updated: return None' check
+            # This forces capture of the current frame state, even if identical to previous
             self._device.im_context.CopyResource(
                 self._stagesurf.texture, self._duplicator.texture
             )
@@ -157,14 +150,11 @@ class DXCamera:
         self, region: Tuple[int, int, int, int], target_fps: int = 60, video_mode=False
     ):
         if target_fps != 0:
-            period_ms = 1000 // target_fps  # millisenonds for periodic timer
+            period_ms = 1000 // target_fps  # milliseconds for periodic timer
             self.__timer_handle = create_high_resolution_timer()
             set_periodic_timer(self.__timer_handle, period_ms)
-
         self.__capture_start_time = time.perf_counter()
-
         capture_error = None
-
         while not self.__stop_capture.is_set():
             if self.__timer_handle:
                 res = wait_for_timer(self.__timer_handle, INFINITE)
@@ -196,7 +186,6 @@ class DXCamera:
                         self.__full = self.__head == self.__tail
             except Exception as e:
                 import traceback
-
                 print(traceback.format_exc())
                 self.__stop_capture.set()
                 capture_error = e
