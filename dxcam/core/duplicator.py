@@ -25,7 +25,6 @@ class Duplicator:
             return True
         elif hr == -1057209500:  # DXGI_ERROR_WAIT_TIMEOUT (no change)
             if force_update:
-                # Force copy of last texture (or release and reacquire to get current state)
                 self.duplicator.ReleaseFrame()  # Release any pending
                 hr2, frame_info2, resource2 = self.duplicator.AcquireNextFrame(0, None)  # Timeout 0 for immediate
                 if hr2 == 0 and resource2:
