@@ -63,23 +63,23 @@ class DXCamera:
         return frame
 
     def _grab(self, region: Tuple[int, int, int, int]):
-        # Modified: Always capture if update_frame() succeeds, even if no visual change (updated=False)
-        if self._duplicator.update_frame():
-            # Removed the 'if not self._duplicator.updated: return None' check
-            # This forces capture of the current frame state, even if identical to previous
-            self._device.im_context.CopyResource(
-                self._stagesurf.texture, self._duplicator.texture
-            )
-            self._duplicator.release_frame()
-            rect = self._stagesurf.map()
-            frame = self._processor.process(
-                rect, self.width, self.height, region, self.rotation_angle
-            )
-            self._stagesurf.unmap()
-            return frame
-        else:
-            self._on_output_change()
-            return None
+    # Modified: Always capture if update_frame succeeds, even if no visual change
+    if self._duplicator.update_frame(force_update=True):  # ← Pass force_update
+        # Removed: if not self._duplicator.updated: return None
+        # Force capture of current frame state, even if identical to previous
+        self._device.im_context.CopyResource(
+            self._stagesurf.texture, self._duplicator.texture
+        )
+        self._duplicator.release_frame()
+        rect = self._stagesurf.map()
+        frame = self._processor.process(
+            rect, self.width, self.height, region, self.rotation_angle
+        )
+        self._stagesurf.unmap()
+        return frame
+    else:
+        self._on_output_change()
+        return None
 
     def _on_output_change(self):
         time.sleep(0.1)  # Wait for Display mode change (Access Lost)
