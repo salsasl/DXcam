@@ -8,42 +8,45 @@ from dxcam.core.output import Output
 
 @dataclass
 class Duplicator:
-    texture: ctypes.POINTER(ID3D11Texture2D) = ctypes.POINTER(ID3D11Texture2D)()
-    duplicator: ctypes.POINTER(IDXGIOutputDuplication) = None
-    updated: bool = False
-    output: InitVar[Output] = None
-    device: InitVar[Device] = None
+    def __init__(self, output: Output, device: Device):
+        self._output = output
+        self._device = device
+        self.duplicator = self._output.output.DuplicateOutput(device.im_context)
+        self.texture = None
+        self.updated = False
 
-    def __post_init__(self, output: Output, device: Device) -> None:
-        self.duplicator = ctypes.POINTER(IDXGIOutputDuplication)()
-        output.output.DuplicateOutput(device.device, ctypes.byref(self.duplicator))
-
-    def update_frame(self):
-        info = DXGI_OUTDUPL_FRAME_INFO()
-        res = ctypes.POINTER(IDXGIResource)()
-        try:
-            self.duplicator.AcquireNextFrame(
-                0,
-                ctypes.byref(info),
-                ctypes.byref(res),
-            )
-        except comtypes.COMError as ce:
-            if ctypes.c_int32(DXGI_ERROR_ACCESS_LOST).value == ce.args[0]:
-                return False
-            if ctypes.c_int32(DXGI_ERROR_WAIT_TIMEOUT).value == ce.args[0]:
-                self.updated = False
+    def update_frame(self, force_update=False):
+    try:
+        self.updated = False
+        hr, frame_info, resource = self.duplicator.AcquireNextFrame(100, None)
+        if hr == 0:  # S_OK
+            self.texture = self._device.im_context.CreateTexture2DFromDXGIResource(resource)
+            self.updated = True
+            return True
+        elif hr == -1057209500:  # DXGI_ERROR_WAIT_TIMEOUT (no change)
+            if force_update:
+                # Force copy of last texture (or release and reacquire to get current state)
+                self.duplicator.ReleaseFrame()  # Release any pending
+                hr2, frame_info2, resource2 = self.duplicator.AcquireNextFrame(0, None)  # Timeout 0 for immediate
+                if hr2 == 0 and resource2:
+                    self.texture = self._device.im_context.CreateTexture2DFromDXGIResource(resource2)
+                self.updated = True
                 return True
-            else:
-                raise ce
-        try:
-            self.texture = res.QueryInterface(ID3D11Texture2D)
-        except comtypes.COMError as ce:
-            self.duplicator.ReleaseFrame()
-        self.updated = True
-        return True
+            return False  # Skip as before
+        else:
+            self._output.update_desc()
+            return False
+    except comtypes.COMError:
+        return False
+    finally:
+        if 'frame_info' in locals():
+            self.duplicator.ReleaseFrame(frame_info)
 
     def release_frame(self):
-        self.duplicator.ReleaseFrame()
+        if self.texture:
+            self.texture.Release()
+            self.texture = None
+        self.updated = False
 
     def release(self):
         if self.duplicator is not None:
